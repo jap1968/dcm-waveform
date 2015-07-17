@@ -1,0 +1,29 @@
+{
+  "name": "dcm-waveform",
+  "version": "0.0.1",
+  "description": "Component to display DICOM waveform contents",
+  "ignore": [
+    "examples",
+    "src",
+    "test",
+    "gruntfile.js",
+    "package.json",
+    "README.md",
+    ".gitignore"
+  ],
+  "dependencies": {
+    "cornerstone": "~0.7.3",
+    "dicomParser": "~1.0.2",
+    "jquery": "~2.1.1",
+    "c3": "~0.4.10"
+  },
+  "devDependencies": {
+  },
+  "authors" : ["Jose Antonio Perez"],
+  "homepage": "https://github.com/jap1968/dcm-waveform",
+  "keywords": ["DICOM", "medical", "imaging", "waveform", "ECG", "EKG"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jap1968/dcm-waveform"
+  }
+}
