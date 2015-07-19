@@ -6,15 +6,21 @@
 //        console.log("addDOMChart");
     }
 
-    function bindChart(chartId, samples) {
+    function bindChart(chartId, channelData) {
+
+        var samples = channelData.samples;
+        var codeMeaning = channelData.channelDefinition.channelSource.codeMeaning;
 
         var yMax = 1200;
         var yMin = -400;
+//        var yMax = 2.0;
+//        var yMin = -0.4;
+
         var deltaY = 40;
         var deltaY2 = 200;
 
         var xMin = 0;
-        var xMax = 4000;
+        var xMax = samples.length;
         var deltaX = 40;
         var deltaX2 = 200;
 
@@ -22,9 +28,7 @@
         var params = {
             bindto: '#' + chartId,
             data: {
-              columns: [
-                samples
-              ]
+              columns: [[codeMeaning]]
             },
             point: {
                 show: false
@@ -54,6 +58,8 @@
 
             }
         };
+
+        params.data.columns[0] = params.data.columns[0].concat(samples);
 
 
         for (var y = yMin; y <= yMax; y += deltaY) {
@@ -93,6 +99,8 @@
 
                 // Structure: Waveform - Multiplex - channel - sample
 
+                var waveform = {};
+
                 var channelSourceSequence = dataSet.elements.x003a0208;
                 if(channelSourceSequence !== undefined) {
                     console.log("Channel Source Sequence is present");
@@ -107,6 +115,7 @@
                     console.log("Waveform data is present");
                     if (waveformSequence.items.length > 0) {
                         // var multiplex;
+                        waveform.multiplexGroup = {};
 
                         waveformSequence.items.forEach(function (item) {
                             console.log('Item tag: ' + item.tag);
@@ -114,25 +123,27 @@
                             {
                                 // console.log(item);
                                 var multiplexGroup = item.dataSet;
+                                var mg = {}; // multiplexGroup
                                 // console.log(multiplexGroup);
 
-                                var waveformOriginality = multiplexGroup.string('x003a0004'); // VR = CS
-                                var numberOfWaveformChannels = multiplexGroup.uint16('x003a0005'); // VR = US
-                                var numberOfWaveformSamples = multiplexGroup.uint32('x003a0010'); // VR = UL
-                                var samplingFrequency = multiplexGroup.floatString('x003a001a'); // VR = DS
-                                var multiplexGroupLabel = multiplexGroup.string('x003a0020'); // VR = SH
-     
-                                console.log("waveformOriginality: " + waveformOriginality);
-                                console.log("numberOfWaveformChannels: " + numberOfWaveformChannels);
-                                console.log("numberOfWaveformSamples: " + numberOfWaveformSamples);
-                                console.log("samplingFrequency: " + samplingFrequency);
-                                console.log("multiplexGroupLabel: " + multiplexGroupLabel);
+                                mg.waveformOriginality = multiplexGroup.string('x003a0004'); // VR = CS
+                                mg.numberOfWaveformChannels = multiplexGroup.uint16('x003a0005'); // VR = US
+                                mg.numberOfWaveformSamples = multiplexGroup.uint32('x003a0010'); // VR = UL
+                                mg.samplingFrequency = multiplexGroup.floatString('x003a001a'); // VR = DS
+                                mg.multiplexGroupLabel = multiplexGroup.string('x003a0020'); // VR = SH
 
+/*     
+                                console.log("waveformOriginality: " + mg.waveformOriginality);
+                                console.log("numberOfWaveformChannels: " + mg.numberOfWaveformChannels);
+                                console.log("numberOfWaveformSamples: " + mg.numberOfWaveformSamples);
+                                console.log("samplingFrequency: " + mg.samplingFrequency);
+                                console.log("multiplexGroupLabel: " + mg.multiplexGroupLabel);
+*/
                                 // Initialization of channels
-                                var multiplexSamples = [];
-                                for(var numChannel = 0; numChannel < numberOfWaveformChannels; numChannel++ ) {
+                                mg.channels = [];
+                                for(var numChannel = 0; numChannel < mg.numberOfWaveformChannels; numChannel++ ) {
                                     // console.log(numChannel);
-                                    multiplexSamples[numChannel] = [];
+//                                    mg.samples[numChannel] = [];
                                     var chartId = 'myChart_' + numChannel;
                                     addDOMChart('myWaveform', chartId);
                                 }
@@ -140,7 +151,7 @@
 
 
                                 channelDefinitionSequence = multiplexGroup.elements.x003a0200;
-                                console.log(channelDefinitionSequence);
+                                // console.log(channelDefinitionSequence);
                                 var numDefinition = 0;
                                 if (channelDefinitionSequence !== undefined) {
                                     if (channelDefinitionSequence.items.length > 0) {
@@ -149,63 +160,91 @@
                                             {
                                                 // console.log("numDefinition: " + numDefinition);
                                                 var channelDefinition = item.dataSet;
+                                                var cd = {}; // channelDefinition
                                                 // console.log(channelDefinition);
+
 
                                                 var channelSourceSequence = channelDefinition.elements.x003a0208;
                                                 if (channelSourceSequence !== undefined) {
-                                                    if (channelSourceSequence.items.length > 0) {
+                                                    if (channelSourceSequence.items.length > 0) { 
                                                         var channelSource = channelSourceSequence.items[0].dataSet;
+                                                        cd.channelSource = {};
                                                         // console.log(channelSource);
-                                                        var codeMeaning = channelSource.string('x00080104'); // VR = LO
-
-
-                                                        // http://stackoverflow.com/questions/12855400/rchannel-sensitivity-in-dicom-waveforms
-                                                        multiplexSamples[numDefinition].push(codeMeaning);
-
+                                                        cd.channelSource.codeMeaning = channelSource.string('x00080104'); // VR = LO
                                                     }
                                                 }
+
+                                                // http://stackoverflow.com/questions/12855400/rchannel-sensitivity-in-dicom-waveforms
+                                                cd.channelSensitivity = channelDefinition.string('x003a0210'); // VR = DS
+
+                                                var channelSensitivityUnitsSequence = channelDefinition.elements.x003a0211;
+                                                if (channelSensitivityUnitsSequence !== undefined) {
+                                                    if (channelSensitivityUnitsSequence.items.length > 0) { 
+                                                        var channelSensitivityUnits = channelSensitivityUnitsSequence.items[0].dataSet;
+                                                        cd.channelSensitivityUnits = {};
+                                                        cd.channelSensitivityUnits.codeMeaning = channelSensitivityUnits.string('x00080104'); // VR = LO
+                                                    }
+                                                }
+
+                                                cd.channelSensitivityCorrectionFactor = channelDefinition.string('x003a0212'); // VR = DS
+                                                cd.channelBaseline = channelDefinition.string('x003a0213'); // VR = DS
+                                                // cd.channelTimeSkew = channelDefinition.string('x003a0214'); // VR = DS
+                                                // cd.channelSampleSkew = channelDefinition.string('x003a0215'); // VR = DS
+                                                cd.waveformBitsStored = channelDefinition.uint16('x003a021a'); // VR = US
+                                                // cd.filterLowFrequency = channelDefinition.string('x003a0220'); // VR = DS
+                                                // cd.filterHighFrequency = channelDefinition.string('x003a0221'); // VR = DS
+
+                                                mg.channels[numDefinition] = {};
+                                                mg.channels[numDefinition].channelDefinition = cd;
+                                                mg.channels[numDefinition].samples = [];
+
                                                 numDefinition++;
-
-
                                             }
                                         });
                                     }
 
                                 }
+                                console.log(mg);
 
 
-
-                                var waveformBitsAllocated = multiplexGroup.uint16('x54001004'); // VR = US
-                                var waveformSampleInterpretation = multiplexGroup.string('x54001006'); // VR = CS
-                                switch (waveformBitsAllocated) {
+                                mg.waveformBitsAllocated = multiplexGroup.uint16('x54001004'); // VR = US
+                                mg.waveformSampleInterpretation = multiplexGroup.string('x54001006'); // VR = CS
+                                switch (mg.waveformBitsAllocated) {
                                     case 8:
-                                        switch (waveformSampleInterpretation) {
+                                        switch (mg.waveformSampleInterpretation) {
                                             case 'SB': // signed 8 bit linear
                                             case 'UB': // unsigned 8 bit linear
                                             case 'MB': // 8 bit mu-law (in accordance with ITU-T Recommendation G.711)
                                             case 'AB': // 8 bit A-law (in accordance with ITU-T Recommendation G.711)
                                             default:
                                                 var waveformPaddingValue = multiplexGroup.string('x5400100a'); // VR = OB
-                                                var waveformData = multiplexGroup.string('x54001010'); // VR = OB or OW
+                                                var waveformData = multiplexGroup.string('x54001010'); // VR = OB or OW (OB)
                                         }
                                     break;
 
                                     case 16:
-                                        switch (waveformSampleInterpretation) {
+                                        switch (mg.waveformSampleInterpretation) {
                                             case 'SS': // signed 16 bit linear
                                                 var waveformPaddingValue = multiplexGroup.int16('x5400100a'); // VR = OB or OW (OW->SS)
                                                 var waveformData = multiplexGroup.string('x54001010'); // VR = OB or OW
                                                 var sampleOffset = multiplexGroup.elements.x54001010.dataOffset;
 //                                                var sampleSize = multiplexGroup.elements.x54001010.length / 2; // 16 bit!
-                                                var sampleSize = numberOfWaveformSamples * numberOfWaveformChannels;
+                                                var sampleSize = mg.numberOfWaveformSamples * mg.numberOfWaveformChannels;
                                                 console.log('sampleOffset: ' + sampleOffset + ', sampleSize: ' + sampleSize);
                                                 var sampleData = new Int16Array(dataSet.byteArray.buffer, sampleOffset, sampleSize);
 
                                                 var pos = 0;
 
-                                                for(var numSample = 0; numSample < numberOfWaveformSamples; numSample++ ) {
-                                                    for(var numChannel = 0; numChannel < numberOfWaveformChannels; numChannel++ ) {
-                                                        multiplexSamples[numChannel].push(sampleData[pos]);
+/*
+Channel Sensitivity: Nominal numeric value of unit quantity of sample. Required if samples represent defined (not arbitrary) units.
+Channel Sensitivity Units Sequence: A coded descriptor of the Units of measure for the Channel Sensitivity.
+Channel Sensitivity Correction Factor: Multiplier to be applied to encoded sample values to match units specified in Channel Sensitivity
+Channel Baseline: Offset of encoded sample value 0 from actual 0 using the units defined in the Channel Sensitivity Units Sequence
+*/
+                                                for(var numSample = 0; numSample < mg.numberOfWaveformSamples; numSample++ ) {
+                                                    for(var numChannel = 0; numChannel < mg.numberOfWaveformChannels; numChannel++ ) {
+                                                        // mg.channels[numChannel].samples.push(sampleData[pos] * mg.channels[numChannel].channelDefinition.channelSensitivity);
+                                                        mg.channels[numChannel].samples.push(sampleData[pos]);
                                                         pos++;
                                                         // sample = dataSet.byteArray, offset, ...
 
@@ -213,9 +252,13 @@
                                                 }
                                                 console.log("Multiplex samples have been read");
 
-                                                for(var numChannel = 0; numChannel < numberOfWaveformChannels; numChannel++ ) {
+
+
+
+                                                for(var numChannel = 0; numChannel < mg.numberOfWaveformChannels; numChannel++ ) {
                                                     var chartId = 'myChart_' + numChannel;
-                                                    bindChart(chartId, multiplexSamples[numChannel]); // .slice(0, 4000)
+                                                    // bindChart(chartId, multiplexSamples[numChannel]); // .slice(0, 4000)
+                                                    bindChart(chartId, mg.channels[numChannel]);
                                                 }
 
                                                 //console.log(multiplexSamples);
@@ -237,13 +280,12 @@
 
                                     default:
 //                                     throw
-                                }
+                                };
 
 
-
-                                console.log("waveformBitsAllocated: " + waveformBitsAllocated);
-                                console.log("waveformSampleInterpretation: " + waveformSampleInterpretation);
-                                console.log("waveformPaddingValue: " + waveformPaddingValue);
+                                console.log("waveformBitsAllocated: " + mg.waveformBitsAllocated);
+                                console.log("waveformSampleInterpretation: " + mg.waveformSampleInterpretation);
+                                console.log("waveformPaddingValue: " + waveformPaddingValue); // ToDo...
                                 
 
                             }
@@ -260,7 +302,7 @@
 
     }
 
-
+/*
     function makeWaveformPlot(imageId, dataSet, byteArray) {
 
         // extract the DICOM attributes we need
@@ -282,7 +324,7 @@
             return storedPixelData;
         }
     }
-
+*/
 
     // based on https://github.com/chafey/cornerstone/wiki/ImageLoader
     function loadInstance(imageId) {
