@@ -6,18 +6,19 @@
 //        console.log("addDOMChart");
     }
 
-    function bindChart(chartId, channelData) {
+    function bindChart(chartId, channelData, yAxis) {
+//        console.log(yAxis);
 
         var samples = channelData.samples;
         var codeMeaning = channelData.channelDefinition.channelSource.codeMeaning;
 
-        var yMax = 1200;
-        var yMin = -400;
+//        var yMax = 1500;
+//        var yMin = -500;
 //        var yMax = 2.0;
 //        var yMin = -0.4;
 
-        var deltaY = 40;
-        var deltaY2 = 200;
+//        var deltaYSecondary = 100;
+//        var deltaYMain = 500;
 
         var xMin = 0;
         var xMax = samples.length;
@@ -43,8 +44,15 @@
                     }
                 },
                 y: {
-                    max: yMax,
-                    min: yMin
+                    max: yAxis.max,
+                    min: yAxis.min,
+                    label: {
+                        text: yAxis.label,
+                        position: 'outer-middle'
+                    },
+                    tick: {
+                        values: []
+                    }
                 }
             },
             grid: {
@@ -62,12 +70,13 @@
         params.data.columns[0] = params.data.columns[0].concat(samples);
 
 
-        for (var y = yMin; y <= yMax; y += deltaY) {
+        for (var y = yAxis.min; y <= yAxis.max; y += yAxis.deltaSecondary) {
             params.grid.y.lines.push({value: y});
         }
 
-        for (var y = yMin; y <= yMax; y += deltaY2) {
+        for (var y = yAxis.min; y <= yAxis.max; y += yAxis.deltaMain) {
             params.grid.y.lines.push({value: y});
+            params.axis.y.tick.values.push(y);
         }
 
         for (var x = xMin; x <= xMax; x += deltaX) {
@@ -83,6 +92,28 @@
         var chart = c3.generate(params);
         console.log('bindChart end');
     }
+
+
+    /**
+     * Helper function to read sequences of coded elements, like:
+     * - Channel Source Sequence (003A,0208)
+     * - Channel Sensitivity Units Sequence (003A,0211)
+     */
+    function readCodeSequence(codeSequence) {
+        var code = {};
+        if (codeSequence !== undefined) {
+            if (codeSequence.items.length > 0) { 
+                var codeDataset = codeSequence.items[0].dataSet;
+                // console.log(codeDataset);
+                code.codeValue = codeDataset.string('x00080100'); // VR = SH
+                code.codingSchemeDesignator = codeDataset.string('x00080102'); // VR = SH
+                code.codingSchemeVersion = codeDataset.string('x00080103'); // VR = SH
+                code.codeMeaning = codeDataset.string('x00080104'); // VR = LO
+            }
+        }
+        return code;
+    }
+
 
     function createInstanceObject(dataSet, imageId)
     {
@@ -132,22 +163,13 @@
                                 mg.samplingFrequency = multiplexGroup.floatString('x003a001a'); // VR = DS
                                 mg.multiplexGroupLabel = multiplexGroup.string('x003a0020'); // VR = SH
 
-/*     
-                                console.log("waveformOriginality: " + mg.waveformOriginality);
-                                console.log("numberOfWaveformChannels: " + mg.numberOfWaveformChannels);
-                                console.log("numberOfWaveformSamples: " + mg.numberOfWaveformSamples);
-                                console.log("samplingFrequency: " + mg.samplingFrequency);
-                                console.log("multiplexGroupLabel: " + mg.multiplexGroupLabel);
-*/
                                 // Initialization of channels
                                 mg.channels = [];
                                 for(var numChannel = 0; numChannel < mg.numberOfWaveformChannels; numChannel++ ) {
                                     // console.log(numChannel);
-//                                    mg.samples[numChannel] = [];
                                     var chartId = 'myChart_' + numChannel;
                                     addDOMChart('myWaveform', chartId);
                                 }
-                                // console.log(multiplexSamples);
 
 
                                 channelDefinitionSequence = multiplexGroup.elements.x003a0200;
@@ -163,29 +185,11 @@
                                                 var cd = {}; // channelDefinition
                                                 // console.log(channelDefinition);
 
-
-                                                var channelSourceSequence = channelDefinition.elements.x003a0208;
-                                                if (channelSourceSequence !== undefined) {
-                                                    if (channelSourceSequence.items.length > 0) { 
-                                                        var channelSource = channelSourceSequence.items[0].dataSet;
-                                                        cd.channelSource = {};
-                                                        // console.log(channelSource);
-                                                        cd.channelSource.codeMeaning = channelSource.string('x00080104'); // VR = LO
-                                                    }
-                                                }
+                                                cd.channelSource = readCodeSequence(channelDefinition.elements.x003a0208);
 
                                                 // http://stackoverflow.com/questions/12855400/rchannel-sensitivity-in-dicom-waveforms
                                                 cd.channelSensitivity = channelDefinition.string('x003a0210'); // VR = DS
-
-                                                var channelSensitivityUnitsSequence = channelDefinition.elements.x003a0211;
-                                                if (channelSensitivityUnitsSequence !== undefined) {
-                                                    if (channelSensitivityUnitsSequence.items.length > 0) { 
-                                                        var channelSensitivityUnits = channelSensitivityUnitsSequence.items[0].dataSet;
-                                                        cd.channelSensitivityUnits = {};
-                                                        cd.channelSensitivityUnits.codeMeaning = channelSensitivityUnits.string('x00080104'); // VR = LO
-                                                    }
-                                                }
-
+                                                cd.channelSensitivityUnits = readCodeSequence(channelDefinition.elements.x003a0211);
                                                 cd.channelSensitivityCorrectionFactor = channelDefinition.string('x003a0212'); // VR = DS
                                                 cd.channelBaseline = channelDefinition.string('x003a0213'); // VR = DS
                                                 // cd.channelTimeSkew = channelDefinition.string('x003a0214'); // VR = DS
@@ -235,12 +239,8 @@
 
                                                 var pos = 0;
 
-/*
-Channel Sensitivity: Nominal numeric value of unit quantity of sample. Required if samples represent defined (not arbitrary) units.
-Channel Sensitivity Units Sequence: A coded descriptor of the Units of measure for the Channel Sensitivity.
-Channel Sensitivity Correction Factor: Multiplier to be applied to encoded sample values to match units specified in Channel Sensitivity
-Channel Baseline: Offset of encoded sample value 0 from actual 0 using the units defined in the Channel Sensitivity Units Sequence
-*/
+                                                // 10 mm/mV is a rather standard value for ECG
+
                                                 for(var numSample = 0; numSample < mg.numberOfWaveformSamples; numSample++ ) {
                                                     for(var numChannel = 0; numChannel < mg.numberOfWaveformChannels; numChannel++ ) {
                                                         // mg.channels[numChannel].samples.push(sampleData[pos] * mg.channels[numChannel].channelDefinition.channelSensitivity);
@@ -252,16 +252,6 @@ Channel Baseline: Offset of encoded sample value 0 from actual 0 using the units
                                                 }
                                                 console.log("Multiplex samples have been read");
 
-
-
-
-                                                for(var numChannel = 0; numChannel < mg.numberOfWaveformChannels; numChannel++ ) {
-                                                    var chartId = 'myChart_' + numChannel;
-                                                    // bindChart(chartId, multiplexSamples[numChannel]); // .slice(0, 4000)
-                                                    bindChart(chartId, mg.channels[numChannel]);
-                                                }
-
-                                                //console.log(multiplexSamples);
 
 
                                             break;
@@ -283,9 +273,77 @@ Channel Baseline: Offset of encoded sample value 0 from actual 0 using the units
                                 };
 
 
+
+
                                 console.log("waveformBitsAllocated: " + mg.waveformBitsAllocated);
                                 console.log("waveformSampleInterpretation: " + mg.waveformSampleInterpretation);
                                 console.log("waveformPaddingValue: " + waveformPaddingValue); // ToDo...
+
+/*
+Channel Sensitivity: Nominal numeric value of unit quantity of sample. Required if samples represent defined (not arbitrary) units.
+Channel Sensitivity Units Sequence: A coded descriptor of the Units of measure for the Channel Sensitivity.
+Channel Sensitivity Correction Factor: Multiplier to be applied to encoded sample values to match units specified in Channel Sensitivity
+Channel Baseline: Offset of encoded sample value 0 from actual 0 using the units defined in the Channel Sensitivity Units Sequence
+*/
+                                var adjValue;
+                                for(var numChannel = 0; numChannel < mg.numberOfWaveformChannels; numChannel++ ) {
+                                    var channel = mg.channels[numChannel];
+                                    var baseline = Number(channel.channelDefinition.channelBaseline);
+                                    var sensitivity = Number(channel.channelDefinition.channelSensitivity);
+                                    var sensitivityCorrectionFactor = Number(channel.channelDefinition.channelSensitivityCorrectionFactor);
+                                    
+                                    // ATM: Units hardcoded as uV. ToDo: Change this!
+                                    // var units = channel.channelDefinition.channelSensitivityUnits.codeValue;
+
+                                    for(var numSample = 0; numSample < mg.numberOfWaveformSamples; numSample++ ) {
+                                        adjValue = baseline + channel.samples[numSample] * sensitivity * sensitivityCorrectionFactor;
+                                        channel.samples[numSample] = adjValue;
+                                    }
+                                }
+
+
+// *** ToDo:
+// Automatic selection of units range depending on max / min values ??''
+// Automatic selection depending on SOP Class UID ?
+                                for(var numChannel = 0; numChannel < mg.numberOfWaveformChannels; numChannel++ ) {
+                                    var chartId = 'myChart_' + numChannel;
+                                    var yAxis = {};
+                                    
+                                    switch (mg.channels[numChannel].channelDefinition.channelSensitivityUnits.codeValue) {
+                                        case 'uV':
+                                            yAxis.min = -500;
+                                            yAxis.max = 1500;
+                                            yAxis.deltaMain = 500;
+                                            yAxis.deltaSecondary = 100;
+                                        break;
+
+                                        case 'mV':
+                                        // *** ToDo: proper rounding of values in y axis
+                                            yAxis.min = -0.5;
+                                            yAxis.max = 1.5;
+                                            yAxis.deltaMain = 0.5;
+                                            yAxis.deltaSecondary = 0.1;
+                                        break;
+
+                                        case 'mm[Hg]': // Better 60 ~ 160 range ?
+                                            yAxis.min = 0;
+                                            yAxis.max = 200;
+                                            yAxis.deltaMain = 100;
+                                            yAxis.deltaSecondary = 20;
+                                        break;
+
+                                        default:
+                                            yAxis.min = -500;
+                                            yAxis.max = 1500;
+                                            yAxis.deltaMain = 500;
+                                            yAxis.deltaSecondary = 100;
+                                    };
+                                    
+
+                                    yAxis.label = mg.channels[numChannel].channelDefinition.channelSensitivityUnits.codeMeaning + ' (' + 
+                                          mg.channels[numChannel].channelDefinition.channelSensitivityUnits.codeValue + ')';
+                                    bindChart(chartId, mg.channels[numChannel], yAxis);
+                                }
                                 
 
                             }
@@ -302,29 +360,6 @@ Channel Baseline: Offset of encoded sample value 0 from actual 0 using the units
 
     }
 
-/*
-    function makeWaveformPlot(imageId, dataSet, byteArray) {
-
-        // extract the DICOM attributes we need
-        var pixelSpacing = cornerstoneWADOImageLoader.getPixelSpacing(dataSet);
-        var rows = dataSet.uint16('x00280010');
-        var columns = dataSet.uint16('x00280011');
-        var rescaleSlopeAndIntercept = cornerstoneWADOImageLoader.getRescaleSlopeAndIntercept(dataSet);
-        var bytesPerPixel = getBytesPerPixel(dataSet);
-        var numPixels = rows * columns;
-        var sizeInBytes = numPixels * bytesPerPixel;
-        var invert = (photometricInterpretation === "MONOCHROME1");
-        var windowWidthAndCenter = cornerstoneWADOImageLoader.getWindowWidthAndCenter(dataSet);
-
-        // Decompress and decode the pixel data for this image
-        var storedPixelData = extractStoredPixels(dataSet, columns, rows, frame);
-        var minMax = getMinMax(storedPixelData);
-
-        function getPixelData() {
-            return storedPixelData;
-        }
-    }
-*/
 
     // based on https://github.com/chafey/cornerstone/wiki/ImageLoader
     function loadInstance(imageId) {
